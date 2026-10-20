@@ -1,0 +1,4 @@
+*.app/
+generated/
+.DS_Store
+backup-local/
