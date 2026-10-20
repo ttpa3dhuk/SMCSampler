@@ -9,7 +9,7 @@
 - Остаток времени над фейдером; измеритель сигнала внутри полосы, обновляется и при закрытом фейдере.
 - При запуске звук заблокирован, фейдеры в нуле, мастер 100%.
 
-Приватный репозиторий: https://github.com/ttpa3dhuk/SMCSampler
+Публичный репозиторий: https://github.com/ttpa3dhuk/SMCSampler
 Сборка: ./build.sh. Проверка без звука: './SMC Sampler.app/Contents/MacOS/SMCSampler' --self-test.
 Пути/настройки живут в Application Support и preferences; локальный снимок на конец сессии: backup-local/ (в git не входит).
 Новых задач нет. История: JOURNAL.md; ограничения: README.md. До отмашки никаких звуковых тестов и голосовых команд.
