@@ -3,7 +3,8 @@
 set -eu
 cd "${0:A:h}"
 APP="${1:-$PWD/SMC Sampler.app}"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$PWD/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # The installer builds both architectures into a private staging directory.
 # A normal local build retains the host architecture.
 ARCHS="${ARCHS:-$(uname -m)}"
@@ -23,9 +24,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>SMCSampler</string>
 <key>CFBundleIdentifier</key><string>life.azat.smcsampler</string>
 <key>CFBundleName</key><string>SMC Sampler</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.0</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.4.1</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSBluetoothAlwaysUsageDescription</key><string>Подключение MIDI-контроллера SMC-Mixer.</string>
 <key>NSHighResolutionCapable</key><true/>
