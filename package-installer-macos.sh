@@ -2,7 +2,7 @@
 # Build a universal Installer package without installing or launching the app.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-VERSION='0.2.0'
+VERSION='0.3.0'
 OUT_DIR="$ROOT/generated"
 OUT="$OUT_DIR/SMC-Sampler-$VERSION-macOS-universal.pkg"
 fail() { echo "package-installer: $*" >&2; exit 1; }
@@ -57,7 +57,7 @@ cat > "$WORK/Distribution" <<'XML'
   <volume-check><allowed-os-versions><os-version min="13.0"/></allowed-os-versions></volume-check>
   <choices-outline><line choice="app"/></choices-outline>
   <choice id="app" title="SMC Sampler" visible="false"><pkg-ref id="life.azat.smcsampler.installer"/></choice>
-  <pkg-ref id="life.azat.smcsampler.installer" version="0.2.0" onConclusion="none">app.pkg</pkg-ref>
+  <pkg-ref id="life.azat.smcsampler.installer" version="0.3.0" onConclusion="none">app.pkg</pkg-ref>
 </installer-gui-script>
 XML
 SIGN_ARGS=()

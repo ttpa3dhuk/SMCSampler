@@ -370,8 +370,10 @@ final class MeterSliderCell: NSSliderCell {
 
 final class SlotView: NSView {
     var load: ((URL) -> Void)?
+    var click: ((Int) -> Void)?
     override init(frame: NSRect) { super.init(frame: frame); registerForDraggedTypes([.fileURL]) }
     required init?(coder: NSCoder) { fatalError() }
+    override func mouseDown(with event: NSEvent) { click?(event.clickCount) }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], let url = urls.first else { return false }
@@ -389,15 +391,18 @@ final class App: NSObject, NSApplicationDelegate {
     var masterUp: [Int] = []
     var learningMaster = 0
     var heldButtons = Set<String>()
-    let masterMapping = NSTextField(labelWithString: "Мастер: кнопки не назначены")
-    let connection = NSTextField(labelWithString: "SMC не подключён")
-    let event = NSTextField(labelWithString: "MIDI: ожидание")
+    let connection = NSTextField(labelWithString: "SMC")
+    let connectionDot = NSTextField(labelWithString: "●")
+    let event = NSTextField(labelWithString: "")
     let status = NSTextField(labelWithString: "")
-    let arm = NSButton(checkboxWithTitle: "Разрешить звук", target: nil, action: nil)
-    let masterLabel = NSTextField(labelWithString: "Мастер: 100%")
+    let arm = NSSwitch()
+    let masterLabel = NSTextField(labelWithString: "100%")
     var names: [NSTextField] = [], states: [NSTextField] = [], sliders: [NSSlider] = []
     var countdowns: [NSTextField] = []
     var meters: [MeterSliderCell] = []
+    var plays: [NSButton] = [], stops: [NSButton] = [], pluses: [NSButton] = []
+    var settingsMenu: NSMenu!
+    var midiMenuItem: NSMenuItem?
     var armed = false
     var learningStop = false
     var timer: Timer?
@@ -411,25 +416,86 @@ final class App: NSObject, NSApplicationDelegate {
         CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--self-test-engine")
     }
 
-    func statusText(_ text: String) { status.stringValue = text }
+    func statusText(_ text: String) {
+        status.stringValue = text
+        status.isHidden = text.isEmpty
+    }
+
+    func caption(_ text: String) -> NSTextField {
+        let field = NSTextField(labelWithString: "")
+        field.attributedStringValue = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+            .kern: 1.2,
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ])
+        return field
+    }
+
+    func iconButton(_ symbol: String, _ tooltip: String, _ action: Selector, _ tag: Int = 0) -> NSButton {
+        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip)?.withSymbolConfiguration(configuration)
+        let button = NSButton(image: image ?? NSImage(), target: self, action: action)
+        button.tag = tag
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = tooltip
+        return button
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 660), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "SMC Sampler 0.2.0 · 8 семплов"; window.center()
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 620), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window.title = "SMC Sampler"
+        window.center()
         let root = window.contentView!
-        func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ size: CGFloat = 14) {
-            let field = NSTextField(labelWithString: text); field.frame = NSRect(x: x, y: y, width: width, height: 28); field.font = .systemFont(ofSize: size); root.addSubview(field)
-        }
-        label("SMC SAMPLER", 24, 605, 350, 26)
-        masterLabel.frame = NSRect(x: 370, y: 610, width: 180, height: 26)
+
+        let title = NSTextField(labelWithString: "")
+        title.attributedStringValue = NSAttributedString(string: "SMC SAMPLER", attributes: [
+            .font: NSFont.systemFont(ofSize: 21, weight: .semibold),
+            .kern: 2.4
+        ])
+        title.frame = NSRect(x: 24, y: 576, width: 320, height: 26)
+        root.addSubview(title)
+
+        let masterCaption = caption("MASTER")
+        masterCaption.frame = NSRect(x: 660, y: 600, width: 70, height: 12)
+        root.addSubview(masterCaption)
+        masterLabel.font = .monospacedDigitSystemFont(ofSize: 21, weight: .medium)
+        masterLabel.frame = NSRect(x: 658, y: 572, width: 90, height: 26)
         root.addSubview(masterLabel)
-        label("Перетащи файл в слот. Ряд 4: запуск. Ряд 3: стоп. Фейдер: громкость.", 24, 569, 690)
-        arm.frame = NSRect(x: 740, y: 608, width: 170, height: 28); arm.target = self; arm.action = #selector(armChanged); root.addSubview(arm)
-        let stop = NSButton(title: "СТОП ВСЁ", target: self, action: #selector(stopAll)); stop.frame = NSRect(x: 920, y: 604, width: 170, height: 36); root.addSubview(stop)
-        let less = NSButton(title: "−5%", target: self, action: #selector(masterLess))
-        less.frame = NSRect(x: 550, y: 604, width: 75, height: 32); root.addSubview(less)
-        let more = NSButton(title: "+5%", target: self, action: #selector(masterMore))
-        more.frame = NSRect(x: 630, y: 604, width: 75, height: 32); root.addSubview(more)
+        let less = iconButton("minus", "Мастер −5%", #selector(masterLess))
+        less.frame = NSRect(x: 744, y: 574, width: 24, height: 24)
+        root.addSubview(less)
+        let more = iconButton("plus", "Мастер +5%", #selector(masterMore))
+        more.frame = NSRect(x: 772, y: 574, width: 24, height: 24)
+        root.addSubview(more)
+
+        let armCaption = caption("ЗВУК")
+        armCaption.frame = NSRect(x: 812, y: 584, width: 40, height: 12)
+        root.addSubview(armCaption)
+        arm.frame = NSRect(x: 812, y: 562, width: 38, height: 20)
+        arm.target = self
+        arm.action = #selector(armChanged)
+        arm.toolTip = "Разрешить воспроизведение"
+        root.addSubview(arm)
+
+        let stop = NSButton(title: "СТОП ВСЁ", target: self, action: #selector(stopAll))
+        stop.frame = NSRect(x: 930, y: 572, width: 160, height: 32)
+        stop.bezelStyle = .rounded
+        stop.font = .systemFont(ofSize: 12, weight: .semibold)
+        stop.hasDestructiveAction = true
+        stop.toolTip = "Остановить все слоты (Esc или пробел)"
+        root.addSubview(stop)
+
+        connectionDot.font = .systemFont(ofSize: 9)
+        connectionDot.textColor = .tertiaryLabelColor
+        connectionDot.frame = NSRect(x: 24, y: 38, width: 12, height: 14)
+        root.addSubview(connectionDot)
+        connection.font = .systemFont(ofSize: 10, weight: .medium)
+        connection.textColor = .secondaryLabelColor
+        connection.frame = NSRect(x: 38, y: 38, width: 240, height: 14)
+        root.addSubview(connection)
+
         if let stored = UserDefaults.standard.array(forKey: "trimDB") as? [Float], stored.count == 8 {
             playback.trims = stored.map { min(0, max(-60, $0.isFinite ? $0 : 0)) }
         }
@@ -438,55 +504,132 @@ final class App: NSObject, NSApplicationDelegate {
         }
         masterDown = UserDefaults.standard.array(forKey: "masterDown") as? [Int] ?? []
         masterUp = UserDefaults.standard.array(forKey: "masterUp") as? [Int] ?? []
+
         for i in 0..<8 {
-            let card = SlotView(frame: NSRect(x: 24 + i * 135, y: 152, width: 127, height: 400))
-            card.wantsLayer = true; card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor; card.layer?.cornerRadius = 10
-            card.load = { [weak self] url in self?.load(url, i) }; root.addSubview(card)
-            let title = NSTextField(labelWithString: "\(i + 1)"); title.frame = NSRect(x: 12, y: 356, width: 40, height: 32); title.font = .boldSystemFont(ofSize: 25); card.addSubview(title)
+            let card = SlotView(frame: NSRect(x: 24 + i * 135, y: 118, width: 127, height: 420))
+            card.wantsLayer = true
+            card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            card.layer?.cornerRadius = 12
+            card.layer?.borderWidth = 1
+            card.layer?.borderColor = NSColor.separatorColor.cgColor
+            card.load = { [weak self] url in self?.load(url, i) }
+            card.click = { [weak self] count in self?.cardClicked(i, count) }
+            card.toolTip = "Перетащи файл сюда; двойной щелчок — заменить"
+            root.addSubview(card)
+
+            let index = NSTextField(labelWithString: String(format: "%02d", i + 1))
+            index.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+            index.textColor = .tertiaryLabelColor
+            index.frame = NSRect(x: 12, y: 388, width: 40, height: 14)
+            card.addSubview(index)
+
+            let plus = iconButton("plus", "Добавить файл", #selector(chooseFileClicked(_:)), i)
+            plus.frame = NSRect(x: 47, y: 244, width: 32, height: 32)
+            plus.contentTintColor = .secondaryLabelColor
+            card.addSubview(plus)
+            pluses.append(plus)
+
             let trim = NSSlider(value: Double(playback.trims[i]), minValue: -60, maxValue: 0, target: self, action: #selector(trimChanged(_:)))
-            trim.sliderType = .circular; trim.tag = i
-            trim.frame = NSRect(x: 77, y: 346, width: 38, height: 38)
+            trim.sliderType = .circular
+            trim.tag = i
+            trim.frame = NSRect(x: 87, y: 374, width: 28, height: 28)
             trim.toolTip = "TRIM: уровень файла до фейдера, −60…0 dB"
-            card.addSubview(trim); trimKnobs.append(trim)
-            let trimText = NSTextField(labelWithString: String(format: "TRIM %.0f dB", playback.trims[i]))
-            trimText.frame = NSRect(x: 10, y: 326, width: 110, height: 20); trimText.alignment = .center
-            trimText.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-            card.addSubview(trimText); trimLabels.append(trimText)
-            let name = NSTextField(wrappingLabelWithString: "Перетащи трек"); name.frame = NSRect(x: 12, y: 286, width: 105, height: 40)
-            name.toolTip = "Имя файла в слоте"; card.addSubview(name); names.append(name)
-            let countdown = NSTextField(labelWithString: "− --:--")
-            countdown.frame = NSRect(x: 10, y: 255, width: 112, height: 30)
+            card.addSubview(trim)
+            trimKnobs.append(trim)
+
+            let trimText = NSTextField(labelWithString: String(format: "%.0f dB", playback.trims[i]))
+            trimText.frame = NSRect(x: 60, y: 354, width: 56, height: 12)
+            trimText.alignment = .right
+            trimText.font = .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+            trimText.textColor = .secondaryLabelColor
+            card.addSubview(trimText)
+            trimLabels.append(trimText)
+
+            let name = NSTextField(wrappingLabelWithString: "")
+            name.frame = NSRect(x: 12, y: 300, width: 103, height: 34)
+            name.font = .systemFont(ofSize: 11, weight: .regular)
+            name.lineBreakMode = .byTruncatingTail
+            name.maximumNumberOfLines = 2
+            name.isHidden = true
+            name.toolTip = "Имя файла в слоте"
+            card.addSubview(name)
+            names.append(name)
+
+            let countdown = NSTextField(labelWithString: "—")
+            countdown.frame = NSRect(x: 6, y: 262, width: 115, height: 32)
             countdown.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
-            countdown.alignment = .center; card.addSubview(countdown); countdowns.append(countdown)
+            countdown.alignment = .center
+            countdown.textColor = .tertiaryLabelColor
+            card.addSubview(countdown)
+            countdowns.append(countdown)
+
             let slider = NSSlider(value: Double(playback.levels[i]), minValue: 0, maxValue: 1, target: self, action: #selector(volumeChanged(_:)))
-            slider.cell = MeterSliderCell(); slider.target = self; slider.action = #selector(volumeChanged(_:)); slider.tag = i; slider.isVertical = true
-            meters.append(slider.cell as! MeterSliderCell); slider.frame = NSRect(x: 48, y: 84, width: 28, height: 168); card.addSubview(slider); sliders.append(slider)
-            let state = NSTextField(labelWithString: "0% · стоп"); state.frame = NSRect(x: 10, y: 61, width: 112, height: 20); state.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular); card.addSubview(state); states.append(state)
-            let play = NSButton(title: "▶ С начала", target: self, action: #selector(playClicked(_:)))
-            play.tag = i; play.frame = NSRect(x: 5, y: 34, width: 88, height: 26); play.font = .systemFont(ofSize: 10.5)
-            play.toolTip = "Запуск с начала"; card.addSubview(play)
-            let stopSlot = NSButton(title: "■", target: self, action: #selector(stopClicked(_:)))
-            stopSlot.tag = i; stopSlot.frame = NSRect(x: 95, y: 34, width: 27, height: 26)
-            stopSlot.toolTip = "Стоп и возврат в начало"; card.addSubview(stopSlot)
-            let choose = NSButton(title: "Файл…", target: self, action: #selector(chooseFile(_:))); choose.tag = i; choose.frame = NSRect(x: 5, y: 4, width: 117, height: 26); card.addSubview(choose)
+            slider.cell = MeterSliderCell()
+            slider.target = self
+            slider.action = #selector(volumeChanged(_:))
+            slider.tag = i
+            slider.isVertical = true
+            slider.frame = NSRect(x: 48, y: 100, width: 28, height: 150)
+            meters.append(slider.cell as! MeterSliderCell)
+            card.addSubview(slider)
+            sliders.append(slider)
+
+            let state = NSTextField(labelWithString: "СТОП")
+            state.frame = NSRect(x: 8, y: 80, width: 111, height: 12)
+            state.font = .systemFont(ofSize: 9, weight: .semibold)
+            state.alignment = .center
+            state.textColor = .tertiaryLabelColor
+            state.isHidden = true
+            card.addSubview(state)
+            states.append(state)
+
+            let play = iconButton("play.fill", "Запуск с начала", #selector(playClicked(_:)), i)
+            play.frame = NSRect(x: 30, y: 40, width: 32, height: 26)
+            card.addSubview(play)
+            plays.append(play)
+
+            let stopSlot = iconButton("stop.fill", "Стоп и возврат в начало", #selector(stopClicked(_:)), i)
+            stopSlot.frame = NSRect(x: 64, y: 40, width: 32, height: 26)
+            card.addSubview(stopSlot)
+            stops.append(stopSlot)
         }
-        status.frame = NSRect(x: 24, y: 122, width: 720, height: 22)
-        status.font = .systemFont(ofSize: 12, weight: .medium)
+
+        status.frame = NSRect(x: 24, y: 64, width: 760, height: 18)
+        status.font = .systemFont(ofSize: 11, weight: .medium)
+        status.textColor = .secondaryLabelColor
+        status.isHidden = true
         root.addSubview(status)
-        connection.frame = NSRect(x: 24, y: 96, width: 720, height: 22); root.addSubview(connection)
-        event.frame = NSRect(x: 24, y: 70, width: 720, height: 22)
-        event.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular); event.textColor = .secondaryLabelColor
+
+        event.font = .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+        event.textColor = .tertiaryLabelColor
+        event.frame = NSRect(x: 24, y: 12, width: 760, height: 14)
+        event.isHidden = true
         root.addSubview(event)
-        masterMapping.frame = NSRect(x: 24, y: 42, width: 600, height: 22); root.addSubview(masterMapping)
-        let outputTitle = NSTextField(labelWithString: "Выход:"); outputTitle.frame = NSRect(x: 640, y: 42, width: 55, height: 22); root.addSubview(outputTitle)
-        outputPopup = NSPopUpButton(frame: NSRect(x: 700, y: 38, width: 240, height: 26))
-        outputPopup.target = self; outputPopup.action = #selector(outputChanged); root.addSubview(outputPopup)
-        label("Esc или Пробел — стоп всё · 1–8 — запуск слота", 24, 12, 600, 11)
-        let learn = NSButton(title: "Назначить кнопку «Стоп всё»…", target: self, action: #selector(learnStop))
-        learn.frame = NSRect(x: 760, y: 118, width: 330, height: 26); root.addSubview(learn)
-        let learnMasterButton = NSButton(title: "Назначить стрелки мастера…", target: self, action: #selector(learnMaster))
-        learnMasterButton.frame = NSRect(x: 760, y: 92, width: 330, height: 26); root.addSubview(learnMasterButton)
-        updateMasterMapping()
+
+        let outputCaption = caption("ВЫХОД")
+        outputCaption.frame = NSRect(x: 676, y: 46, width: 60, height: 12)
+        root.addSubview(outputCaption)
+        outputPopup = NSPopUpButton(frame: NSRect(x: 742, y: 36, width: 210, height: 26))
+        outputPopup.target = self
+        outputPopup.action = #selector(outputChanged)
+        root.addSubview(outputPopup)
+
+        let gear = iconButton("gearshape", "Настройки и обучение кнопок", #selector(showSettings(_:)))
+        gear.frame = NSRect(x: 966, y: 34, width: 28, height: 28)
+        root.addSubview(gear)
+
+        settingsMenu = NSMenu()
+        for (text, action) in [("Кнопка «Стоп всё»…", #selector(learnStop)), ("Стрелки мастера…", #selector(learnMaster))] {
+            let item = NSMenuItem(title: text, action: action, keyEquivalent: "")
+            item.target = self
+            settingsMenu.addItem(item)
+        }
+        settingsMenu.addItem(.separator())
+        let midiItem = NSMenuItem(title: "Показывать MIDI", action: #selector(toggleMIDI(_:)), keyEquivalent: "")
+        midiItem.target = self
+        settingsMenu.addItem(midiItem)
+        midiMenuItem = midiItem
+
         var startupNote = ""
         if let data = try? Data(contentsOf: config), let stored = try? JSONDecoder().decode([String].self, from: data) {
             for (i, path) in stored.prefix(8).enumerated() where !path.isEmpty {
@@ -511,17 +654,23 @@ final class App: NSObject, NSApplicationDelegate {
         do {
             try playback.setOutput(chosen)
             try playback.start()
-            if startupNote.isEmpty { startupNote = "Выход: " + (chosen?.name ?? "системный") }
         } catch {
             startupNote = "Аудио: \(error.localizedDescription)"
         }
         updateOutputPopup(selected: chosen)
-        if !startupNote.isEmpty { statusText(startupNote) }
+        statusText(startupNote)
+
         midi = MIDI()
         midi.receive = { [weak self] bytes in self?.received(bytes) }
         midi.connection = { [weak self] text in
-            guard let self = self else { return }; self.connection.stringValue = text
-            for i in 0..<8 { self.midi.lamp(i, self.playback.running(i)); self.midi.lamp(i, self.playback.loaded(i), loaded: true) }
+            guard let self = self else { return }
+            let online = text.contains("подключён") && !text.contains("не подключён")
+            self.connectionDot.textColor = online ? .systemGreen : .tertiaryLabelColor
+            self.connection.toolTip = text
+            for i in 0..<8 {
+                self.midi.lamp(i, self.playback.running(i))
+                self.midi.lamp(i, self.playback.loaded(i), loaded: true)
+            }
         }
         midi.connect()
         playback.onEnd = { [weak self] i in self?.midi?.lamp(i, false); self?.refresh() }
@@ -529,29 +678,32 @@ final class App: NSObject, NSApplicationDelegate {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.keyPressed(event) ?? event
         }
-        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         refresh()
     }
 
     // Draws the window into a PNG without showing it or touching audio.
     func renderWindow(to path: String) {
         guard let view = window.contentView else { return }
-        window.appearance = NSAppearance(named: .aqua)
-        for case let card as SlotView in view.subviews { card.layer?.backgroundColor = NSColor(calibratedWhite: 0.95, alpha: 1).cgColor }
+        if CommandLine.arguments.contains("--render-light") { window.appearance = NSAppearance(named: .aqua) }
+        let bounds = view.bounds
+        let backdrop = NSView(frame: bounds)
+        backdrop.wantsLayer = true
+        view.addSubview(backdrop, positioned: .below, relativeTo: nil)
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            backdrop.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            for case let card as SlotView in view.subviews {
+                card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+                card.layer?.borderColor = NSColor.separatorColor.cgColor
+            }
+        }
         view.needsDisplay = true
         view.layoutSubtreeIfNeeded()
         view.displayIfNeeded()
-        let bounds = view.bounds
         if let rep = view.bitmapImageRepForCachingDisplay(in: bounds) {
             view.cacheDisplay(in: bounds, to: rep)
-            let image = NSImage(size: bounds.size)
-            image.lockFocus()
-            NSColor.white.setFill()
-            NSRect(origin: .zero, size: bounds.size).fill()
-            rep.draw(in: NSRect(origin: .zero, size: bounds.size))
-            image.unlockFocus()
-            if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
-               let data = bitmap.representation(using: .png, properties: [:]) {
+            if let data = rep.representation(using: .png, properties: [:]) {
                 try? data.write(to: URL(fileURLWithPath: path))
             }
         }
@@ -563,12 +715,23 @@ final class App: NSObject, NSApplicationDelegate {
         if event.keyCode == 53 || event.keyCode == 49 { stopAll(); return nil }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control])
         if modifiers.isEmpty, let character = event.charactersIgnoringModifiers, let number = Int(character), (1...8).contains(number) {
-            trigger(number - 1); return nil
+            trigger(number - 1)
+            return nil
         }
         return event
     }
 
+    @objc func showSettings(_ sender: NSButton) {
+        settingsMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 6), in: sender)
+    }
+
+    @objc func toggleMIDI(_ item: NSMenuItem) {
+        event.isHidden.toggle()
+        item.state = event.isHidden ? .off : .on
+    }
+
     func updateOutputPopup(selected: AudioDevice?) {
+        outputPopup.target = nil
         outputPopup.removeAllItems()
         outputPopup.addItem(withTitle: "Система (по умолчанию)")
         for device in outputs { outputPopup.addItem(withTitle: device.name) }
@@ -577,6 +740,8 @@ final class App: NSObject, NSApplicationDelegate {
         } else {
             outputPopup.selectItem(at: 0)
         }
+        outputPopup.target = self
+        outputPopup.action = #selector(outputChanged)
     }
 
     @objc func outputChanged() {
@@ -589,11 +754,25 @@ final class App: NSObject, NSApplicationDelegate {
         do {
             try playback.setOutput(device)
             UserDefaults.standard.set(device?.uid ?? "", forKey: "outputUID")
-            statusText("Выход: " + (device?.name ?? "системный"))
         } catch {
             statusText("Выход: \(error.localizedDescription)")
         }
         refresh()
+    }
+
+    func cardClicked(_ i: Int, _ clicks: Int) {
+        if clicks >= 2 || !playback.loaded(i) { chooseFile(i) }
+    }
+
+    @objc func chooseFileClicked(_ sender: NSButton) { chooseFile(sender.tag) }
+
+    func chooseFile(_ i: Int) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.beginSheetModal(for: window) { [weak self] result in
+            if result == .OK, let url = panel.url { self?.load(url, i) }
+        }
     }
 
     @discardableResult
@@ -619,7 +798,6 @@ final class App: NSObject, NSApplicationDelegate {
                 return false
             }
         }
-        statusText("Слот \(i + 1): \(url.lastPathComponent)")
         refresh()
         return true
     }
@@ -631,33 +809,43 @@ final class App: NSObject, NSApplicationDelegate {
         return ""
     }
 
-    @objc func chooseFile(_ sender: NSButton) {
-        let panel = NSOpenPanel(); panel.allowedContentTypes = [.audio]; panel.allowsMultipleSelection = false
-        panel.beginSheetModal(for: window) { [weak self] result in
-            if result == .OK, let url = panel.url { self?.load(url, sender.tag) }
-        }
+    @objc func learnStop() {
+        learningMaster = 0
+        learningStop = true
+        armed = false
+        arm.state = .off
+        stopAll()
+        statusText("Нажми «Пауза» на SMC — сохраню как стоп всё. Звук заблокирован.")
     }
 
-    @objc func learnStop() { learningMaster = 0; learningStop = true; armed = false; arm.state = .off; stopAll(); statusText("Нажми нижнюю кнопку «Пауза»: сохраню её как Стоп всё. Звук заблокирован.") }
     @objc func armChanged() {
         armed = arm.state == .on
-        if armed { statusText("Звук разрешён") } else { stopAll(); statusText("Звук заблокирован") }
+        if !armed { stopAll() }
     }
+
     func stopSlot(_ i: Int) {
-        playback.stop(i); midi?.lamp(i, false)
-        statusText("Слот \(i + 1): стоп"); refresh()
+        playback.stop(i)
+        midi?.lamp(i, false)
+        refresh()
     }
+
     @objc func stopAll() {
-        for i in 0..<8 { playback.stop(i); midi?.lamp(i, false) }
-        statusText("Стоп всё: все слоты остановлены"); refresh()
+        for i in 0..<8 {
+            playback.stop(i)
+            midi?.lamp(i, false)
+        }
+        refresh()
     }
+
     @objc func stopClicked(_ sender: NSButton) { stopSlot(sender.tag) }
     @objc func volumeChanged(_ sender: NSSlider) { setVolume(sender.tag, sender.floatValue) }
+
     func setVolume(_ i: Int, _ value: Float) {
         playback.setLevel(i, value)
         sliders[i].floatValue = playback.levels[i]
         scheduleLevelsSave()
     }
+
     func scheduleLevelsSave() {
         guard !isSelfTest else { return }
         saveTimer?.invalidate()
@@ -665,38 +853,51 @@ final class App: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(self?.playback.levels ?? [], forKey: "levels")
         }
     }
+
     func setMaster(_ value: Float) {
         playback.setMaster(value)
-        masterLabel.stringValue = "Мастер: \(Int((playback.master * 100).rounded()))%"
+        masterLabel.stringValue = "\(Int((playback.master * 100).rounded()))%"
     }
+
     @objc func masterLess() { setMaster(playback.master - 0.05) }
     @objc func masterMore() { setMaster(playback.master + 0.05) }
     @objc func trimChanged(_ sender: NSSlider) { setTrim(sender.tag, sender.floatValue) }
+
     func setTrim(_ i: Int, _ value: Float) {
         playback.setTrim(i, value)
         trimKnobs[i].floatValue = playback.trims[i]
-        trimLabels[i].stringValue = String(format: "TRIM %.0f dB", playback.trims[i])
+        trimLabels[i].stringValue = String(format: "%.0f dB", playback.trims[i])
         if !isSelfTest { UserDefaults.standard.set(playback.trims, forKey: "trimDB") }
     }
-    func updateMasterMapping() {
-        masterMapping.stringValue = masterDown.count == 2 && masterUp.count == 2 ? "Мастер: стрелки −5% / +5% назначены" : "Мастер: назначь нижние стрелки кнопкой справа"
-    }
+
     @objc func learnMaster() {
-        learningStop = false; learningMaster = 1
-        armed = false; arm.state = .off; stopAll()
-        statusText("Нажми нижнюю стрелку ВНИЗ (мастер −5%)")
+        learningStop = false
+        learningMaster = 1
+        armed = false
+        arm.state = .off
+        stopAll()
+        statusText("Нажми нижнюю стрелку ВНИЗ на SMC (мастер −5%)")
     }
+
     @objc func playClicked(_ sender: NSButton) { trigger(sender.tag) }
+
     func trigger(_ i: Int) {
-        guard armed else { statusText("Слот \(i + 1): запуск заблокирован. В перерыве включи «Разрешить звук»."); return }
-        if let problem = playback.trigger(i) { statusText("Слот \(i + 1): \(problem)"); refresh(); return }
+        guard armed else {
+            statusText("Слот \(i + 1): звук заблокирован")
+            return
+        }
+        if let problem = playback.trigger(i) {
+            statusText("Слот \(i + 1): \(problem)")
+            refresh()
+            return
+        }
         midi?.lamp(i, true)
-        statusText("Слот \(i + 1): играет")
         refresh()
     }
+
     func received(_ b: [UInt8]) {
         guard b.count == 3 else { return }
-        event.stringValue = "MIDI: " + b.map { String(format: "%02X", $0) }.joined(separator: " ")
+        event.stringValue = "MIDI " + b.map { String(format: "%02X", $0) }.joined(separator: " ")
         let type = b[0] & 0xF0, channel = Int(b[0] & 15)
         let eligible = (type == 0x90 || type == 0xB0) && b[2] > 0 && !(type == 0xB0 && (30...47).contains(b[1]))
         let command = [Int(b[0]), Int(b[1])]
@@ -708,16 +909,24 @@ final class App: NSObject, NSApplicationDelegate {
         if learningMaster > 0 && freshPress {
             let reserved = channel == 0 && ((type == 0xB0 && (b[1] == 53 || (70...97).contains(b[1]))) || (type == 0x90 && b[1] < 32))
             let stop = UserDefaults.standard.array(forKey: "stopCommand") as? [Int] ?? []
-            guard !reserved && command != stop else { statusText("Эта кнопка занята. Нужна нижняя стрелка."); return }
+            guard !reserved && command != stop else {
+                statusText("Эта кнопка занята. Нужна нижняя стрелка.")
+                return
+            }
             if learningMaster == 1 {
-                masterDown = command; learningMaster = 2
-                statusText("Теперь нажми нижнюю стрелку ВВЕРХ (мастер +5%)")
+                masterDown = command
+                learningMaster = 2
+                statusText("Теперь нижняя стрелка ВВЕРХ (мастер +5%)")
             } else {
-                guard command != masterDown else { statusText("Нужна другая кнопка: стрелка ВВЕРХ"); return }
-                masterUp = command; learningMaster = 0
+                guard command != masterDown else {
+                    statusText("Нужна другая кнопка: стрелка ВВЕРХ")
+                    return
+                }
+                masterUp = command
+                learningMaster = 0
                 UserDefaults.standard.set(masterDown, forKey: "masterDown")
                 UserDefaults.standard.set(masterUp, forKey: "masterUp")
-                updateMasterMapping(); statusText("Стрелки мастера сохранены: −5% / +5%")
+                statusText("Стрелки мастера сохранены")
             }
             return
         }
@@ -727,9 +936,14 @@ final class App: NSObject, NSApplicationDelegate {
         }
         if learningStop && eligible {
             UserDefaults.standard.set([Int(b[0]), Int(b[1])], forKey: "stopCommand")
-            learningStop = false; statusText("Кнопка «Стоп всё» сохранена"); return
+            learningStop = false
+            statusText("Кнопка «Стоп всё» сохранена")
+            return
         }
-        if let stop = UserDefaults.standard.array(forKey: "stopCommand") as? [Int], stop == [Int(b[0]), Int(b[1])], b[2] > 0 { stopAll(); return }
+        if let stop = UserDefaults.standard.array(forKey: "stopCommand") as? [Int], stop == [Int(b[0]), Int(b[1])], b[2] > 0 {
+            stopAll()
+            return
+        }
         if type == 0xB0 && channel == 0 {
             if (30...37).contains(b[1]) {
                 let i = Int(b[1]) - 30
@@ -750,16 +964,25 @@ final class App: NSObject, NSApplicationDelegate {
             setVolume(channel, Float(Int(b[1]) + (Int(b[2]) << 7)) / 16383)
         }
     }
+
     func refresh() {
         for i in 0..<8 {
             let playing = playback.running(i)
             let duration = playback.duration(i)
-            if duration > 0 {
+            let loaded = duration > 0
+            names[i].isHidden = !loaded
+            pluses[i].isHidden = loaded
+            states[i].isHidden = !playing
+            plays[i].isHidden = !loaded
+            stops[i].isHidden = !loaded
+            sliders[i].isHidden = !loaded
+            trimKnobs[i].isHidden = !loaded
+            trimLabels[i].isHidden = !loaded
+            countdowns[i].isHidden = !loaded
+            if loaded {
                 let position = playback.finished.contains(i) ? duration : playback.position(i)
                 countdowns[i].stringValue = "− " + timeRemaining(duration, position)
                 countdowns[i].textColor = playing && duration - position <= 10 ? .systemOrange : .labelColor
-            } else {
-                countdowns[i].stringValue = "− --:--"
             }
             if playing {
                 let (power, peak) = playback.meter(i)
@@ -767,11 +990,14 @@ final class App: NSObject, NSApplicationDelegate {
             } else {
                 meters[i].update(power: -160, peak: -160)
             }
-            states[i].stringValue = "\(Int(playback.levels[i] * 100))% · " + (playing ? "играет" : "стоп")
-            states[i].textColor = playing ? .systemGreen : .secondaryLabelColor
+            states[i].stringValue = "ИГРАЕТ"
+            states[i].textColor = .systemGreen
+            plays[i].contentTintColor = playing ? .systemGreen : .secondaryLabelColor
         }
     }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
     func applicationWillTerminate(_ notification: Notification) {
         for i in 0..<8 { playback.stop(i) }
         if !isSelfTest { UserDefaults.standard.set(playback.levels, forKey: "levels") }
@@ -789,9 +1015,9 @@ final class App: NSObject, NSApplicationDelegate {
         received([0x90, 31, 127]); assert(status.stringValue.contains("Слот 8"))
         received([0xB0, 53, 127]); assert((0..<8).allSatisfy { !playback.running($0) })
         for i in 0..<8 {
-            received([0xB0, UInt8(90 + i), 127]); assert(status.stringValue == "Слот \(i + 1): стоп")
-            received([0x90, UInt8(i), 127]); assert(status.stringValue == "Слот \(i + 1): стоп")
+            received([0xB0, UInt8(90 + i), 127]); assert(!playback.running(i))
             received([0xB0, UInt8(90 + i), 0]); assert(!playback.running(i))
+            received([0x90, UInt8(i), 127]); assert(!playback.running(i))
             received([0x90, UInt8(i), 0]); assert(!playback.running(i))
         }
         setMaster(0.5)
