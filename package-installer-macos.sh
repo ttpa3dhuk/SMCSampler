@@ -2,8 +2,9 @@
 # Build a universal Installer package without installing or launching the app.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+VERSION='0.2.0'
 OUT_DIR="$ROOT/generated"
-OUT="$OUT_DIR/SMC-Sampler-0.1.0-macOS-universal.pkg"
+OUT="$OUT_DIR/SMC-Sampler-$VERSION-macOS-universal.pkg"
 fail() { echo "package-installer: $*" >&2; exit 1; }
 [ "$(uname -s)" = Darwin ] || fail 'macOS is required'
 mkdir -p "$OUT_DIR"
@@ -44,7 +45,7 @@ cat > "$WORK/components.plist" <<'PLIST'
 </dict></array></plist>
 PLIST
 pkgbuild --root "$PAYLOAD" --component-plist "$WORK/components.plist" \
-  --identifier life.azat.smcsampler.installer --version 0.1.0 \
+  --identifier life.azat.smcsampler.installer --version "$VERSION" \
   --install-location /Applications --ownership recommended "$WORK/app.pkg"
 
 cat > "$WORK/Distribution" <<'XML'
@@ -56,7 +57,7 @@ cat > "$WORK/Distribution" <<'XML'
   <volume-check><allowed-os-versions><os-version min="13.0"/></allowed-os-versions></volume-check>
   <choices-outline><line choice="app"/></choices-outline>
   <choice id="app" title="SMC Sampler" visible="false"><pkg-ref id="life.azat.smcsampler.installer"/></choice>
-  <pkg-ref id="life.azat.smcsampler.installer" version="0.1.0" onConclusion="none">app.pkg</pkg-ref>
+  <pkg-ref id="life.azat.smcsampler.installer" version="0.2.0" onConclusion="none">app.pkg</pkg-ref>
 </installer-gui-script>
 XML
 SIGN_ARGS=()
