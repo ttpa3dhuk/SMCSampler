@@ -80,6 +80,14 @@ func timeRemaining(_ duration: TimeInterval, _ position: TimeInterval) -> String
     return String(format: "%02d:%02d", seconds / 60, seconds % 60)
 }
 
+func roundedFont(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
+    let base = NSFont.systemFont(ofSize: size, weight: weight)
+    if let descriptor = base.fontDescriptor.withDesign(.rounded) {
+        return NSFont(descriptor: descriptor, size: size) ?? base
+    }
+    return base
+}
+
 func samplerError(_ text: String) -> NSError {
     NSError(domain: "SMC Sampler", code: 1, userInfo: [NSLocalizedDescriptionKey: text])
 }
@@ -374,6 +382,17 @@ final class SlotView: NSView {
     override init(frame: NSRect) { super.init(frame: frame); registerForDraggedTypes([.fileURL]) }
     required init?(coder: NSCoder) { fatalError() }
     override func mouseDown(with event: NSEvent) { click?(event.clickCount) }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) {
+        layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
+    }
+    override func mouseExited(with event: NSEvent) {
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+    }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], let url = urls.first else { return false }
@@ -444,8 +463,12 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 984, height: 540), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 984, height: 560), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "SMC Sampler"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .windowBackgroundColor
         window.center()
         let root = window.contentView!
 
@@ -454,33 +477,33 @@ final class App: NSObject, NSApplicationDelegate {
             .font: NSFont.systemFont(ofSize: 19, weight: .semibold),
             .kern: 2.2
         ])
-        title.frame = NSRect(x: 24, y: 484, width: 260, height: 24)
+        title.frame = NSRect(x: 24, y: 504, width: 260, height: 24)
         root.addSubview(title)
 
         let masterCaption = caption("MASTER")
-        masterCaption.frame = NSRect(x: 420, y: 510, width: 70, height: 12)
+        masterCaption.frame = NSRect(x: 420, y: 530, width: 70, height: 12)
         root.addSubview(masterCaption)
-        masterLabel.font = .monospacedDigitSystemFont(ofSize: 19, weight: .medium)
-        masterLabel.frame = NSRect(x: 418, y: 484, width: 80, height: 24)
+        masterLabel.font = roundedFont(19, .medium)
+        masterLabel.frame = NSRect(x: 418, y: 504, width: 80, height: 24)
         root.addSubview(masterLabel)
         let less = iconButton("minus", "Мастер −5%", #selector(masterLess))
-        less.frame = NSRect(x: 500, y: 486, width: 22, height: 22)
+        less.frame = NSRect(x: 500, y: 506, width: 22, height: 22)
         root.addSubview(less)
         let more = iconButton("plus", "Мастер +5%", #selector(masterMore))
-        more.frame = NSRect(x: 526, y: 486, width: 22, height: 22)
+        more.frame = NSRect(x: 526, y: 506, width: 22, height: 22)
         root.addSubview(more)
 
         let armCaption = caption("ЗВУК")
-        armCaption.frame = NSRect(x: 566, y: 494, width: 40, height: 12)
+        armCaption.frame = NSRect(x: 566, y: 514, width: 40, height: 12)
         root.addSubview(armCaption)
-        arm.frame = NSRect(x: 610, y: 487, width: 38, height: 22)
+        arm.frame = NSRect(x: 610, y: 507, width: 38, height: 22)
         arm.target = self
         arm.action = #selector(armChanged)
         arm.toolTip = "Разрешить воспроизведение"
         root.addSubview(arm)
 
         let stop = NSButton(title: "СТОП ВСЁ", target: self, action: #selector(stopAll))
-        stop.frame = NSRect(x: 760, y: 484, width: 200, height: 30)
+        stop.frame = NSRect(x: 760, y: 504, width: 200, height: 30)
         stop.bezelStyle = .rounded
         stop.font = .systemFont(ofSize: 12, weight: .semibold)
         stop.hasDestructiveAction = true
@@ -489,7 +512,12 @@ final class App: NSObject, NSApplicationDelegate {
 
         connectionDot.font = .systemFont(ofSize: 9)
         connectionDot.textColor = .tertiaryLabelColor
-        connectionDot.frame = NSRect(x: 24, y: 30, width: 10, height: 12)
+        let rule = NSView(frame: NSRect(x: 24, y: 492, width: 936, height: 1))
+        rule.wantsLayer = true
+        rule.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.6).cgColor
+        root.addSubview(rule)
+
+        connectionDot.frame = NSRect(x: 24, y: 32, width: 10, height: 12)
         root.addSubview(connectionDot)
         connection.font = .systemFont(ofSize: 10, weight: .medium)
         connection.textColor = .secondaryLabelColor
@@ -508,17 +536,19 @@ final class App: NSObject, NSApplicationDelegate {
         for i in 0..<8 {
             let card = SlotView(frame: NSRect(x: 24 + i * 118, y: 66, width: 110, height: 400))
             card.wantsLayer = true
-            card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-            card.layer?.cornerRadius = 12
+            let dark = window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            card.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.05) : NSColor.black.withAlphaComponent(0.035)).cgColor
+            card.layer?.cornerRadius = 14
+            card.layer?.cornerCurve = .continuous
             card.layer?.borderWidth = 1
-            card.layer?.borderColor = NSColor.separatorColor.cgColor
+            card.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
             card.load = { [weak self] url in self?.load(url, i) }
             card.click = { [weak self] count in self?.cardClicked(i, count) }
             card.toolTip = "Перетащи файл сюда; двойной щелчок — заменить"
             root.addSubview(card)
 
             let index = NSTextField(labelWithString: String(format: "%02d", i + 1))
-            index.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+            index.font = roundedFont(9, .semibold)
             index.textColor = .tertiaryLabelColor
             index.frame = NSRect(x: 10, y: 374, width: 30, height: 12)
             card.addSubview(index)
@@ -558,7 +588,7 @@ final class App: NSObject, NSApplicationDelegate {
 
             let countdown = NSTextField(labelWithString: "—")
             countdown.frame = NSRect(x: 6, y: 248, width: 98, height: 30)
-            countdown.font = .monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
+            countdown.font = roundedFont(20, .semibold)
             countdown.alignment = .center
             countdown.textColor = .tertiaryLabelColor
             card.addSubview(countdown)
@@ -694,9 +724,10 @@ final class App: NSObject, NSApplicationDelegate {
         view.addSubview(backdrop, positioned: .below, relativeTo: nil)
         window.effectiveAppearance.performAsCurrentDrawingAppearance {
             backdrop.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            let dark = window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             for case let card as SlotView in view.subviews {
-                card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-                card.layer?.borderColor = NSColor.separatorColor.cgColor
+                card.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.05) : NSColor.black.withAlphaComponent(0.035)).cgColor
+                card.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
             }
         }
         view.needsDisplay = true

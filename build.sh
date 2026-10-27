@@ -24,8 +24,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIdentifier</key><string>life.azat.smcsampler</string>
 <key>CFBundleName</key><string>SMC Sampler</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.1</string>
-<key>CFBundleVersion</key><string>5</string>
+<key>CFBundleShortVersionString</key><string>0.4.0</string>
+<key>CFBundleVersion</key><string>6</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSBluetoothAlwaysUsageDescription</key><string>Подключение MIDI-контроллера SMC-Mixer.</string>
 <key>NSHighResolutionCapable</key><true/>
