@@ -444,43 +444,43 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 620), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 984, height: 540), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "SMC Sampler"
         window.center()
         let root = window.contentView!
 
         let title = NSTextField(labelWithString: "")
         title.attributedStringValue = NSAttributedString(string: "SMC SAMPLER", attributes: [
-            .font: NSFont.systemFont(ofSize: 21, weight: .semibold),
-            .kern: 2.4
+            .font: NSFont.systemFont(ofSize: 19, weight: .semibold),
+            .kern: 2.2
         ])
-        title.frame = NSRect(x: 24, y: 576, width: 320, height: 26)
+        title.frame = NSRect(x: 24, y: 484, width: 260, height: 24)
         root.addSubview(title)
 
         let masterCaption = caption("MASTER")
-        masterCaption.frame = NSRect(x: 660, y: 600, width: 70, height: 12)
+        masterCaption.frame = NSRect(x: 420, y: 510, width: 70, height: 12)
         root.addSubview(masterCaption)
-        masterLabel.font = .monospacedDigitSystemFont(ofSize: 21, weight: .medium)
-        masterLabel.frame = NSRect(x: 658, y: 572, width: 90, height: 26)
+        masterLabel.font = .monospacedDigitSystemFont(ofSize: 19, weight: .medium)
+        masterLabel.frame = NSRect(x: 418, y: 484, width: 80, height: 24)
         root.addSubview(masterLabel)
         let less = iconButton("minus", "Мастер −5%", #selector(masterLess))
-        less.frame = NSRect(x: 744, y: 574, width: 24, height: 24)
+        less.frame = NSRect(x: 500, y: 486, width: 22, height: 22)
         root.addSubview(less)
         let more = iconButton("plus", "Мастер +5%", #selector(masterMore))
-        more.frame = NSRect(x: 772, y: 574, width: 24, height: 24)
+        more.frame = NSRect(x: 526, y: 486, width: 22, height: 22)
         root.addSubview(more)
 
         let armCaption = caption("ЗВУК")
-        armCaption.frame = NSRect(x: 812, y: 584, width: 40, height: 12)
+        armCaption.frame = NSRect(x: 566, y: 494, width: 40, height: 12)
         root.addSubview(armCaption)
-        arm.frame = NSRect(x: 812, y: 562, width: 38, height: 20)
+        arm.frame = NSRect(x: 610, y: 487, width: 38, height: 22)
         arm.target = self
         arm.action = #selector(armChanged)
         arm.toolTip = "Разрешить воспроизведение"
         root.addSubview(arm)
 
         let stop = NSButton(title: "СТОП ВСЁ", target: self, action: #selector(stopAll))
-        stop.frame = NSRect(x: 930, y: 572, width: 160, height: 32)
+        stop.frame = NSRect(x: 760, y: 484, width: 200, height: 30)
         stop.bezelStyle = .rounded
         stop.font = .systemFont(ofSize: 12, weight: .semibold)
         stop.hasDestructiveAction = true
@@ -489,11 +489,11 @@ final class App: NSObject, NSApplicationDelegate {
 
         connectionDot.font = .systemFont(ofSize: 9)
         connectionDot.textColor = .tertiaryLabelColor
-        connectionDot.frame = NSRect(x: 24, y: 38, width: 12, height: 14)
+        connectionDot.frame = NSRect(x: 24, y: 30, width: 10, height: 12)
         root.addSubview(connectionDot)
         connection.font = .systemFont(ofSize: 10, weight: .medium)
         connection.textColor = .secondaryLabelColor
-        connection.frame = NSRect(x: 38, y: 38, width: 240, height: 14)
+        connection.frame = NSRect(x: 36, y: 30, width: 160, height: 12)
         root.addSubview(connection)
 
         if let stored = UserDefaults.standard.array(forKey: "trimDB") as? [Float], stored.count == 8 {
@@ -506,7 +506,7 @@ final class App: NSObject, NSApplicationDelegate {
         masterUp = UserDefaults.standard.array(forKey: "masterUp") as? [Int] ?? []
 
         for i in 0..<8 {
-            let card = SlotView(frame: NSRect(x: 24 + i * 135, y: 118, width: 127, height: 420))
+            let card = SlotView(frame: NSRect(x: 24 + i * 118, y: 66, width: 110, height: 400))
             card.wantsLayer = true
             card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
             card.layer?.cornerRadius = 12
@@ -518,13 +518,13 @@ final class App: NSObject, NSApplicationDelegate {
             root.addSubview(card)
 
             let index = NSTextField(labelWithString: String(format: "%02d", i + 1))
-            index.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+            index.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
             index.textColor = .tertiaryLabelColor
-            index.frame = NSRect(x: 12, y: 388, width: 40, height: 14)
+            index.frame = NSRect(x: 10, y: 374, width: 30, height: 12)
             card.addSubview(index)
 
             let plus = iconButton("plus", "Добавить файл", #selector(chooseFileClicked(_:)), i)
-            plus.frame = NSRect(x: 47, y: 244, width: 32, height: 32)
+            plus.frame = NSRect(x: 39, y: 184, width: 32, height: 32)
             plus.contentTintColor = .secondaryLabelColor
             card.addSubview(plus)
             pluses.append(plus)
@@ -532,13 +532,13 @@ final class App: NSObject, NSApplicationDelegate {
             let trim = NSSlider(value: Double(playback.trims[i]), minValue: -60, maxValue: 0, target: self, action: #selector(trimChanged(_:)))
             trim.sliderType = .circular
             trim.tag = i
-            trim.frame = NSRect(x: 87, y: 374, width: 28, height: 28)
+            trim.frame = NSRect(x: 39, y: 338, width: 32, height: 32)
             trim.toolTip = "TRIM: уровень файла до фейдера, −60…0 dB"
             card.addSubview(trim)
             trimKnobs.append(trim)
 
             let trimText = NSTextField(labelWithString: String(format: "%.0f dB", playback.trims[i]))
-            trimText.frame = NSRect(x: 60, y: 354, width: 56, height: 12)
+            trimText.frame = NSRect(x: 19, y: 320, width: 72, height: 12)
             trimText.alignment = .right
             trimText.font = .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
             trimText.textColor = .secondaryLabelColor
@@ -546,18 +546,19 @@ final class App: NSObject, NSApplicationDelegate {
             trimLabels.append(trimText)
 
             let name = NSTextField(wrappingLabelWithString: "")
-            name.frame = NSRect(x: 12, y: 300, width: 103, height: 34)
-            name.font = .systemFont(ofSize: 11, weight: .regular)
+            name.frame = NSRect(x: 10, y: 282, width: 90, height: 32)
+            name.font = .systemFont(ofSize: 10.5, weight: .regular)
             name.lineBreakMode = .byTruncatingTail
             name.maximumNumberOfLines = 2
+            name.cell?.wraps = true
             name.isHidden = true
             name.toolTip = "Имя файла в слоте"
             card.addSubview(name)
             names.append(name)
 
             let countdown = NSTextField(labelWithString: "—")
-            countdown.frame = NSRect(x: 6, y: 262, width: 115, height: 32)
-            countdown.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
+            countdown.frame = NSRect(x: 6, y: 248, width: 98, height: 30)
+            countdown.font = .monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
             countdown.alignment = .center
             countdown.textColor = .tertiaryLabelColor
             card.addSubview(countdown)
@@ -569,14 +570,14 @@ final class App: NSObject, NSApplicationDelegate {
             slider.action = #selector(volumeChanged(_:))
             slider.tag = i
             slider.isVertical = true
-            slider.frame = NSRect(x: 48, y: 100, width: 28, height: 150)
+            slider.frame = NSRect(x: 42, y: 90, width: 26, height: 150)
             meters.append(slider.cell as! MeterSliderCell)
             card.addSubview(slider)
             sliders.append(slider)
 
             let state = NSTextField(labelWithString: "СТОП")
-            state.frame = NSRect(x: 8, y: 80, width: 111, height: 12)
-            state.font = .systemFont(ofSize: 9, weight: .semibold)
+            state.frame = NSRect(x: 6, y: 72, width: 98, height: 12)
+            state.font = .systemFont(ofSize: 8.5, weight: .semibold)
             state.alignment = .center
             state.textColor = .tertiaryLabelColor
             state.isHidden = true
@@ -584,38 +585,38 @@ final class App: NSObject, NSApplicationDelegate {
             states.append(state)
 
             let play = iconButton("play.fill", "Запуск с начала", #selector(playClicked(_:)), i)
-            play.frame = NSRect(x: 30, y: 40, width: 32, height: 26)
+            play.frame = NSRect(x: 26, y: 30, width: 28, height: 24)
             card.addSubview(play)
             plays.append(play)
 
             let stopSlot = iconButton("stop.fill", "Стоп и возврат в начало", #selector(stopClicked(_:)), i)
-            stopSlot.frame = NSRect(x: 64, y: 40, width: 32, height: 26)
+            stopSlot.frame = NSRect(x: 56, y: 30, width: 28, height: 24)
             card.addSubview(stopSlot)
             stops.append(stopSlot)
         }
 
-        status.frame = NSRect(x: 24, y: 64, width: 760, height: 18)
-        status.font = .systemFont(ofSize: 11, weight: .medium)
+        status.frame = NSRect(x: 24, y: 46, width: 600, height: 14)
+        status.font = .systemFont(ofSize: 10, weight: .medium)
         status.textColor = .secondaryLabelColor
         status.isHidden = true
         root.addSubview(status)
 
         event.font = .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
         event.textColor = .tertiaryLabelColor
-        event.frame = NSRect(x: 24, y: 12, width: 760, height: 14)
+        event.frame = NSRect(x: 24, y: 10, width: 600, height: 12)
         event.isHidden = true
         root.addSubview(event)
 
         let outputCaption = caption("ВЫХОД")
-        outputCaption.frame = NSRect(x: 676, y: 46, width: 60, height: 12)
+        outputCaption.frame = NSRect(x: 646, y: 36, width: 56, height: 12)
         root.addSubview(outputCaption)
-        outputPopup = NSPopUpButton(frame: NSRect(x: 742, y: 36, width: 210, height: 26))
+        outputPopup = NSPopUpButton(frame: NSRect(x: 708, y: 28, width: 196, height: 24))
         outputPopup.target = self
         outputPopup.action = #selector(outputChanged)
         root.addSubview(outputPopup)
 
         let gear = iconButton("gearshape", "Настройки и обучение кнопок", #selector(showSettings(_:)))
-        gear.frame = NSRect(x: 966, y: 34, width: 28, height: 28)
+        gear.frame = NSRect(x: 930, y: 28, width: 24, height: 24)
         root.addSubview(gear)
 
         settingsMenu = NSMenu()
